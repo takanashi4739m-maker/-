@@ -1,0 +1,44 @@
+# Render Blueprint（夏祭り屋台アプリ）
+# Render のダッシュボードで「Blueprint」から本ファイルを適用するとまとめて作成される。
+# 参考: https://render.com/docs/blueprint-spec
+
+databases:
+  - name: festival-db
+    databaseName: festival
+    plan: free  # 無料プラン。必要に応じて starter 以上へ変更。
+
+services:
+  - type: web
+    name: festival-yatai
+    runtime: python
+    plan: free
+    # ビルド: 依存インストール + 静的ファイル収集（WhiteNoise 配信用）。
+    buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput"
+    # デプロイ直前に migrate を実行（初期データ 0002/0004 もここで投入される）。
+    preDeployCommand: "python manage.py migrate"
+    # 本番起動は gunicorn（WSGI）。
+    startCommand: "gunicorn config.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true  # Render が安全な値を自動生成。
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_ALLOWED_HOSTS
+        # このサービスのホスト名を自動注入。独自ドメイン利用時は追記する。
+        fromService:
+          type: web
+          name: festival-yatai
+          property: host
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        # トークンURLの HTTPS POST を通すため Origin を信頼。
+        # ホスト名から https://<host> を組み立てる（下の sync:false で初回に手入力も可）。
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: festival-db
+          property: connectionString
+      - key: BASE_URL
+        # show_urls コマンドがフルURLを表示するのに使う（任意）。初回に手入力。
+        sync: false

@@ -1,0 +1,134 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}{{ event.name }} ｜ ダッシュボード{% endblock %}
+
+{% block head_extra %}
+<style>
+  .dash-head{max-width:520px; margin:10px auto 0; padding:0 16px; text-align:center}
+  .dash-head .de{font-size:11px; font-weight:800; letter-spacing:.14em; color:var(--ink-faint); text-transform:uppercase}
+  .dash-head h1{margin:3px 0 0; font-size:19px; font-weight:900; color:var(--ink)}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px}
+  .kpi{background:linear-gradient(135deg,var(--indigo),color-mix(in srgb,var(--indigo) 70%,#000));
+    color:#fff; border-radius:18px; padding:16px; position:relative; overflow:hidden}
+  .kpi .k-lbl{font-size:12px; font-weight:700; opacity:.85}
+  .kpi .k-val{font-size:36px; font-weight:900; letter-spacing:-.01em; margin:2px 0 2px; font-variant-numeric:tabular-nums}
+  .kpi .k-val small{font-size:17px; font-weight:800; margin-right:2px}
+  .kpi .k-sub{font-size:12px; opacity:.9; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .kpi .k-sub b{font-weight:800}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px}
+  .mini .m-lbl{font-size:11.5px; color:var(--ink-soft); font-weight:700; display:flex; align-items:center; gap:6px}
+  .mini .m-val{font-size:22px; font-weight:900; margin-top:3px; font-variant-numeric:tabular-nums}
+  .mini .m-val small{font-size:13px; font-weight:800}
+  .sect-h{display:flex; align-items:center; justify-content:space-between; margin:18px 0 9px}
+  .sect-h h3{margin:0; font-size:13.5px; font-weight:800}
+  .sect-h .hint{font-size:11.5px; color:var(--ink-faint)}
+  .bar-row{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line-soft)}
+  .bar-row:last-child{border-bottom:0}
+  .bar-row .bn{flex:0 0 92px; font-size:12.5px; font-weight:700; display:flex; align-items:center; gap:6px; min-width:0}
+  .bar-row .bn .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .bar-track{flex:1; height:9px; border-radius:6px; background:var(--well); overflow:hidden}
+  .bar-fill{height:100%; border-radius:6px}
+  .bar-row .bv{flex:0 0 auto; font-size:12.5px; font-weight:800; font-variant-numeric:tabular-nums; width:66px; text-align:right}
+  .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
+  .cash-row{display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line-soft); font-size:13px}
+  .cash-row:last-child{border-bottom:0}
+  .cash-row .cn{font-weight:700; display:flex; align-items:center; gap:7px}
+  .cash-row .cv{font-weight:800; font-variant-numeric:tabular-nums}
+  .cash-row .cv.neg{color:var(--crit)}
+  .alert{display:flex; align-items:center; gap:9px; padding:10px 12px; border-radius:12px; font-size:12.5px; font-weight:600; margin-bottom:8px}
+  .alert.warn{background:var(--warn-bg); color:var(--warn)}
+  .alert.crit{background:var(--crit-bg); color:var(--crit)}
+  .alert b{font-weight:800}
+  .alert .sname{margin-left:auto; opacity:.8; font-weight:700; white-space:nowrap}
+  .empty-note{color:var(--ink-faint); font-size:12.5px; text-align:center; padding:12px 0}
+</style>
+{% endblock %}
+
+{% block content %}
+    <div class="dash-head">
+      <div class="de">全体ダッシュボード</div>
+      <h1>{{ event.name }}</h1>
+    </div>
+
+    <section class="screen" aria-label="ダッシュボード">
+      <p class="eyebrow">本日のまとめ ・ {{ today|date:"n/j (D)" }}</p>
+
+      <div class="kpi">
+        <div class="k-lbl">全屋台 本日の売上</div>
+        <div class="k-val"><small>¥</small>{{ today_sales|floatformat:0 }}</div>
+        <div class="k-sub">
+          全期間 累計 <b class="num">¥{{ total_sales|floatformat:0 }}</b>
+          ・ 純利益 <b class="num">¥{{ net_profit|floatformat:0 }}</b>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card mini">
+          <div class="m-lbl"><span class="dot" style="background:var(--good)"></span>手元現金 合計</div>
+          <div class="m-val"><small>¥</small>{{ cash_total|floatformat:0 }}</div>
+        </div>
+        <div class="card mini">
+          <div class="m-lbl"><span class="dot" style="background:var(--gold)"></span>本日の会計数</div>
+          <div class="m-val">{{ today_count }}<small>件</small></div>
+        </div>
+      </div>
+
+      <div class="sect-h"><h3>屋台ごとの売上</h3><span class="hint">全期間 累計</span></div>
+      <div class="card">
+        {% for row in stall_rows %}
+          <div class="bar-row">
+            <div class="bn"><span class="dot" style="background:{{ row.color }}"></span>
+              <span class="nm">{{ row.stall.emoji }}{{ row.stall.name }}</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:{{ row.pct }}%;background:{{ row.color }}"></div></div>
+            <div class="bv">¥{{ row.sales|floatformat:0 }}</div>
+          </div>
+        {% empty %}
+          <p class="empty-note">屋台がありません。</p>
+        {% endfor %}
+      </div>
+
+      <div class="sect-h"><h3>屋台ごとの手元現金</h3><span class="hint">初期釣り銭＋入出金</span></div>
+      <div class="card">
+        {% for row in stall_rows %}
+          <div class="cash-row">
+            <span class="cn"><span class="dot" style="background:{{ row.color }}"></span>{{ row.stall.emoji }}{{ row.stall.name }}</span>
+            <span class="cv{% if row.cash < 0 %} neg{% endif %}">¥{{ row.cash|floatformat:0 }}</span>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="sect-h"><h3>在庫アラート</h3><span class="hint">残少・売切</span></div>
+      {% for a in alerts %}
+        {% if a.out %}
+          <div class="alert crit"><b>売切</b>{{ a.product.name }}
+            <span class="sname">{{ a.stall.emoji }}{{ a.stall.name }}</span></div>
+        {% else %}
+          <div class="alert warn"><b>残少</b>{{ a.product.name }}（残 {{ a.remaining }}）
+            <span class="sname">{{ a.stall.emoji }}{{ a.stall.name }}</span></div>
+        {% endif %}
+      {% empty %}
+        <div class="card"><p class="empty-note">在庫アラートはありません。</p></div>
+      {% endfor %}
+
+      <div class="sect-h"><h3>収支（全期間）</h3></div>
+      <div class="card">
+        <div class="bar-row">
+          <div class="bn">売上</div>
+          <div class="bar-track"><div class="bar-fill" style="width:100%;background:var(--good)"></div></div>
+          <div class="bv">¥{{ total_sales|floatformat:0 }}</div>
+        </div>
+        <div class="bar-row">
+          <div class="bn">仕入・経費</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{ expense_pct }}%;background:var(--crit)"></div></div>
+          <div class="bv">-¥{{ total_expenses|floatformat:0 }}</div>
+        </div>
+        <div class="bar-row">
+          <div class="bn"><b>純利益</b></div>
+          <div class="bar-track" style="background:transparent"></div>
+          <div class="bv" style="color:{% if net_profit < 0 %}var(--crit){% else %}var(--good){% endif %};width:auto">¥{{ net_profit|floatformat:0 }}</div>
+        </div>
+      </div>
+    </section>
+{% endblock %}

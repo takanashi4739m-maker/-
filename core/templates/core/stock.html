@@ -1,0 +1,136 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}{{ stall.emoji }}{{ stall.name }} ｜ 在庫管理{% endblock %}
+
+{% block head_extra %}
+<style>
+  .stock-card{background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:13px 14px; margin-bottom:10px}
+  .stock-card.low{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+  .stock-card.out{border-color:color-mix(in srgb,var(--crit) 45%,var(--line))}
+  .sc-head{display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:11px}
+  .sc-name{font-size:14px; font-weight:800}
+  .sc-now{font-size:12px; color:var(--ink-faint); font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .sc-now b{font-size:17px; color:var(--ink); margin-left:4px}
+  .stock-card.low .sc-now b{color:var(--warn)}
+  .stock-card.out .sc-now b{color:var(--crit)}
+  .stock-tag{font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:6px; margin-left:6px}
+  .stock-tag.low{background:var(--warn-bg); color:var(--warn)}
+  .stock-tag.out{background:var(--crit-bg); color:var(--crit)}
+
+  .sc-row{display:flex; align-items:center; gap:10px; margin-top:9px}
+  .sc-row .lbl{flex:0 0 42px; font-size:11.5px; font-weight:800; color:var(--ink-soft)}
+  .stepper{display:flex; align-items:center; border:1.5px solid var(--line); border-radius:12px; overflow:hidden; flex:0 0 auto}
+  .stepper button{appearance:none; cursor:pointer; width:38px; height:40px; border:0; background:var(--surface); color:var(--ink); font-size:22px; font-weight:700; line-height:1}
+  .stepper button:active{background:var(--well)}
+  .stepper .sv{width:44px; text-align:center; font-size:17px; font-weight:900; font-variant-numeric:tabular-nums}
+  .num-in{width:64px; height:40px; text-align:center; font-family:inherit; font-size:16px; font-weight:800;
+    border:1.5px solid var(--line); border-radius:12px; background:var(--surface); color:var(--ink);
+    font-variant-numeric:tabular-nums}
+  .act{appearance:none; cursor:pointer; font-family:inherit; font-weight:800; font-size:13px; padding:11px 14px;
+    border-radius:12px; border:1.5px solid var(--line); background:var(--surface); color:var(--ink); flex:1}
+  .act:active{transform:scale(.97)}
+  .act.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+  .act.indigo{background:var(--indigo); color:var(--indigo-ink); border-color:var(--indigo)}
+
+  .stock-note{background:var(--indigo); color:var(--indigo-ink); border-radius:14px; padding:12px 14px;
+    font-size:12.5px; font-weight:600; line-height:1.5; margin:14px 0 8px; display:flex; gap:9px; align-items:flex-start}
+  .stock-note b{font-weight:800}
+  .stock-note .ni{flex:0 0 auto; margin-top:1px}
+  .unmanaged{display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:11px 13px; border:1px dashed var(--line); border-radius:12px; margin-bottom:8px; color:var(--ink-soft); font-size:13px}
+  .unmanaged .um-tag{font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:6px; background:var(--well); color:var(--ink-faint)}
+  .num-in:focus,.stepper button:focus-visible,.act:focus-visible{
+    outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:2px}
+</style>
+{% endblock %}
+
+{% block content %}
+    <section class="screen" aria-label="在庫管理">
+      <p class="eyebrow">在庫・残り個数 ・ {{ stall.name }}</p>
+
+      {% for p in managed_products %}
+        {% with r=p.remaining_stock %}
+        <div class="stock-card{% if r <= 0 %} out{% elif r <= p.low_stock_threshold %} low{% endif %}">
+          <div class="sc-head">
+            <span class="sc-name">{{ p.name }}
+              {% if r <= 0 %}<span class="stock-tag out">売切</span>
+              {% elif r <= p.low_stock_threshold %}<span class="stock-tag low">残少</span>{% endif %}
+            </span>
+            <span class="sc-now">現在<b>{{ r }}</b></span>
+          </div>
+
+          {# 補充（+）: ステッパーで補充数を決めて記録 #}
+          <form method="post" action="{% url 'core:stock_manage' access_token=stall.access_token %}" class="restock-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="restock">
+            <input type="hidden" name="product_id" value="{{ p.id }}">
+            <input type="hidden" name="value" class="restock-value" value="1">
+            <div class="sc-row">
+              <span class="lbl">補充</span>
+              <div class="stepper">
+                <button type="button" class="dec" aria-label="補充数を減らす">−</button>
+                <span class="sv">1</span>
+                <button type="button" class="inc" aria-label="補充数を増やす">＋</button>
+              </div>
+              <button type="submit" class="act primary">＋補充する</button>
+            </div>
+          </form>
+
+          {# 棚卸: 現在数を実数に修正（サーバ側で差分を算出して記録） #}
+          <form method="post" action="{% url 'core:stock_manage' access_token=stall.access_token %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="stocktake">
+            <input type="hidden" name="product_id" value="{{ p.id }}">
+            <div class="sc-row">
+              <span class="lbl">棚卸</span>
+              <input class="num-in" type="number" name="value" min="0" step="1"
+                     value="{{ r }}" inputmode="numeric" aria-label="{{ p.name }} の実在庫数">
+              <button type="submit" class="act indigo">実数に修正</button>
+            </div>
+          </form>
+        </div>
+        {% endwith %}
+      {% empty %}
+        <p style="color:var(--ink-faint);text-align:center;padding:20px 0">
+          在庫管理対象の商品がありません。
+        </p>
+      {% endfor %}
+
+      {% if unmanaged_products %}
+        <div class="stock-note">
+          <span class="ni">ℹ️</span>
+          <span>以下は<b>在庫管理の対象外</b>です。売上・現金の記録が中心で、個数は管理しません。</span>
+        </div>
+        {% for p in unmanaged_products %}
+          <div class="unmanaged">
+            <span>{{ p.name }}</span>
+            <span class="um-tag">在庫管理対象外</span>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  "use strict";
+  // 補充ステッパー（各カード独立）
+  Array.prototype.forEach.call(document.querySelectorAll(".restock-form"), function(form){
+    var sv = form.querySelector(".sv");
+    var hidden = form.querySelector(".restock-value");
+    var val = 1;
+    function render(){ sv.textContent = val; hidden.value = val; }
+    form.querySelector(".dec").addEventListener("click", function(){
+      if(val > 1){ val--; render(); }
+    });
+    form.querySelector(".inc").addEventListener("click", function(){
+      if(val < 9999){ val++; render(); }
+    });
+    render();
+  });
+})();
+</script>
+{% endblock %}

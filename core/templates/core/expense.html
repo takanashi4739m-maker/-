@@ -1,0 +1,148 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}{{ stall.emoji }}{{ stall.name }} ｜ 経費入力{% endblock %}
+
+{% block head_extra %}
+<style>
+  .amount-box{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px; text-align:center; margin-bottom:12px}
+  .amount-box .al{font-size:11.5px; color:var(--ink-faint); font-weight:700; letter-spacing:.08em}
+  .amount-box .av{font-size:40px; font-weight:900; margin-top:2px; font-variant-numeric:tabular-nums; color:var(--ink)}
+  .amount-box .av small{font-size:20px; font-weight:800; color:var(--ink-soft); margin-right:2px}
+  .amount-box .av.zero{color:var(--ink-faint)}
+  .field{margin-bottom:14px}
+  .field > label{font-size:12px; font-weight:800; color:var(--ink-soft); display:block; margin-bottom:7px}
+  .cats{display:flex; flex-wrap:wrap; gap:7px}
+  .cat{appearance:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:700; padding:9px 13px;
+    border-radius:999px; border:1.5px solid var(--line); background:var(--surface); color:var(--ink-soft)}
+  .cat[aria-pressed="true"]{background:var(--indigo); color:var(--indigo-ink); border-color:var(--indigo)}
+  .memo{width:100%; font-family:inherit; font-size:14px; padding:12px; border-radius:12px; border:1.5px solid var(--line);
+    background:var(--surface); color:var(--ink); resize:none}
+  .cashline{display:flex; align-items:center; gap:9px; font-size:12.5px; font-weight:700; color:var(--ink-soft); margin-bottom:14px}
+  .cashline input{width:18px; height:18px; accent-color:var(--indigo)}
+  .keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px}
+  .key{appearance:none; cursor:pointer; font-family:inherit; font-size:20px; font-weight:800; padding:15px 0;
+    border-radius:13px; border:1px solid var(--line); background:var(--surface); color:var(--ink);
+    font-variant-numeric:tabular-nums; transition:transform .07s}
+  .key:active{transform:scale(.95); background:var(--well)}
+  .key.util{font-size:15px; color:var(--ink-soft)}
+  .tray-btns{display:flex; gap:9px}
+  .btn{appearance:none; cursor:pointer; font-family:inherit; font-weight:800; border-radius:14px; border:1.5px solid var(--line);
+    background:var(--surface); color:var(--ink); font-size:14px; padding:14px; transition:transform .08s,filter .12s}
+  .btn:active{transform:scale(.97)}
+  .btn.ghost{flex:0 0 auto; width:56px; color:var(--ink-soft)}
+  .btn.rec{flex:1; background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-size:16px;
+    box-shadow:0 8px 18px -8px var(--accent)}
+  .btn.rec:active{background:var(--accent-press)}
+  .btn.rec:disabled{opacity:.45; box-shadow:none; cursor:not-allowed}
+  .memo:focus,.cat:focus-visible,.key:focus-visible,.btn:focus-visible{
+    outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:2px}
+</style>
+{% endblock %}
+
+{% block content %}
+    <section class="screen" aria-label="経費・仕入れ入力">
+      <p class="eyebrow">経費・仕入れ入力 ・ {{ stall.name }}</p>
+
+      <div class="amount-box">
+        <div class="al">金額</div>
+        <div class="av zero" id="expAmount"><small>¥</small>0</div>
+      </div>
+
+      <div class="keypad" id="keypad">
+        <button class="key" type="button">1</button><button class="key" type="button">2</button><button class="key" type="button">3</button>
+        <button class="key" type="button">4</button><button class="key" type="button">5</button><button class="key" type="button">6</button>
+        <button class="key" type="button">7</button><button class="key" type="button">8</button><button class="key" type="button">9</button>
+        <button class="key util" type="button" data-k="00">00</button>
+        <button class="key" type="button">0</button>
+        <button class="key util" type="button" data-k="del" aria-label="1桁削除">⌫</button>
+      </div>
+
+      <form id="expForm" method="post"
+            action="{% url 'core:expense_input' access_token=stall.access_token %}">
+        {% csrf_token %}
+        <input type="hidden" name="amount" id="amountField" value="">
+        <input type="hidden" name="category" id="categoryField" value="{{ categories.0.0 }}">
+
+        <div class="field">
+          <label>カテゴリ</label>
+          <div class="cats" id="cats">
+            {% for value, label in categories %}
+              <button class="cat" type="button" data-value="{{ value }}"
+                      aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">{{ label }}</button>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="note">メモ（任意）</label>
+          <textarea class="memo" id="note" name="note" rows="2" maxlength="200"
+                    placeholder="例：氷 追加仕入れ（○○商店）"></textarea>
+        </div>
+
+        <label class="cashline">
+          <input type="checkbox" id="cashChk" checked>
+          手元の現金から支払った（現金残高に反映）
+          <input type="hidden" name="paid_in_cash" id="paidField" value="1">
+        </label>
+
+        <div class="tray-btns">
+          <button class="btn ghost" id="expClear" type="button" aria-label="金額クリア">C</button>
+          <button class="btn rec" id="expSave" type="submit" disabled>支出を記録</button>
+        </div>
+      </form>
+    </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var yen = function(n){ return n.toLocaleString("ja-JP"); };
+
+  var expVal = "";
+  function render(){
+    var v = expVal === "" ? 0 : parseInt(expVal, 10);
+    var el = $("expAmount");
+    el.innerHTML = '<small>¥</small>' + yen(v);
+    el.classList.toggle("zero", v === 0);
+    $("amountField").value = v;
+    $("expSave").disabled = v === 0;
+  }
+
+  Array.prototype.forEach.call($("keypad").children, function(k){
+    k.addEventListener("click", function(){
+      var kv = k.dataset.k;
+      if(kv === "del"){ expVal = expVal.slice(0, -1); }
+      else if(kv === "00"){ if(expVal !== "") expVal += "00"; }
+      else { if(expVal.replace(/^0+/, "").length < 9) expVal += k.textContent.trim(); }
+      expVal = expVal.replace(/^0+(?=\d)/, "");
+      render();
+    });
+  });
+  $("expClear").addEventListener("click", function(){ expVal = ""; render(); });
+
+  // カテゴリチップ
+  Array.prototype.forEach.call($("cats").children, function(c){
+    c.addEventListener("click", function(){
+      Array.prototype.forEach.call($("cats").children, function(x){ x.setAttribute("aria-pressed", "false"); });
+      c.setAttribute("aria-pressed", "true");
+      $("categoryField").value = c.dataset.value;
+    });
+  });
+
+  // 現金払いチェック
+  $("cashChk").addEventListener("change", function(){
+    $("paidField").value = this.checked ? "1" : "0";
+  });
+
+  // 二重送信防止
+  $("expForm").addEventListener("submit", function(){
+    $("expSave").disabled = true;
+  });
+
+  render();
+})();
+</script>
+{% endblock %}

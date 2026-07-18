@@ -1,0 +1,203 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}{{ stall.emoji }}{{ stall.name }} ｜ 売上入力{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* 売上：商品グリッド */
+  .prodgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .prod{position:relative; appearance:none; cursor:pointer; font-family:inherit; text-align:left;
+    background:var(--surface); border:1.5px solid var(--line); border-radius:16px; padding:14px 13px 13px;
+    min-height:82px; display:flex; flex-direction:column; justify-content:space-between; gap:8px;
+    color:var(--ink); transition:transform .08s, border-color .12s, box-shadow .12s}
+  .prod:active{transform:scale(.96); border-color:var(--accent)}
+  .prod .pn{font-size:14.5px; font-weight:800; line-height:1.25}
+  .prod .pp{font-size:13px; font-weight:800; color:var(--gold); font-variant-numeric:tabular-nums}
+  .prod .stk{font-size:11px; font-weight:700; color:var(--ink-faint); font-variant-numeric:tabular-nums}
+  .prod .stk.low{color:var(--warn)}
+  .prod.wide{grid-column:1 / -1}
+  .badge{position:absolute; top:-8px; right:-8px; min-width:26px; height:26px; padding:0 6px;
+    border-radius:999px; background:var(--accent); color:var(--accent-ink); font-size:13px; font-weight:800;
+    display:none; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(0,0,0,.28); font-variant-numeric:tabular-nums}
+  .prod[data-count]:not([data-count="0"]) > .badge{display:flex}
+  .prod[data-count]:not([data-count="0"]){border-color:var(--accent); background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+  .prod:disabled{cursor:not-allowed; opacity:.55}
+  .prod:disabled:active{transform:none; border-color:var(--line)}
+  .soldout-tag{font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:6px; background:var(--crit-bg); color:var(--crit)}
+
+  /* 会計トレイ */
+  .tray{position:sticky; bottom:0; background:var(--surface); border-top:1px solid var(--line);
+    padding:12px 16px calc(14px + env(safe-area-inset-bottom)); box-shadow:0 -10px 24px -16px rgba(0,0,0,.3); z-index:20}
+  .tray-inner{max-width:520px; margin:0 auto}
+  .tray-list{max-height:132px; overflow-y:auto; margin:0 0 10px; display:flex; flex-direction:column; gap:6px}
+  .tray-empty{color:var(--ink-faint); font-size:12.5px; text-align:center; padding:14px 0}
+  .tline{display:flex; align-items:center; justify-content:space-between; font-size:13px}
+  .tline .l{display:flex; align-items:center; gap:8px; min-width:0}
+  .tline .qty{font-weight:800; color:var(--accent); font-variant-numeric:tabular-nums; flex:0 0 auto}
+  .tline .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tline .amt{font-weight:700; font-variant-numeric:tabular-nums}
+  .tline .x{appearance:none; border:0; background:none; color:var(--ink-faint); cursor:pointer; padding:2px 4px; font-size:15px}
+  .tray-sum{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px}
+  .tray-sum .lbl{font-size:12.5px; color:var(--ink-soft); font-weight:700}
+  .tray-sum .tot{font-size:30px; font-weight:900; letter-spacing:-.01em; font-variant-numeric:tabular-nums}
+  .tray-sum .tot small{font-size:15px; font-weight:800; margin-right:2px}
+  .tray-btns{display:flex; gap:9px}
+  .btn{appearance:none; cursor:pointer; font-family:inherit; font-weight:800; border-radius:14px; border:1.5px solid var(--line);
+    background:var(--surface); color:var(--ink); font-size:14px; padding:14px; transition:transform .08s,filter .12s}
+  .btn:active{transform:scale(.97)}
+  .btn.ghost{flex:0 0 auto; width:56px; color:var(--ink-soft)}
+  .btn.rec{flex:1; background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-size:16px;
+    box-shadow:0 8px 18px -8px var(--accent)}
+  .btn.rec:active{background:var(--accent-press)}
+  .btn.rec:disabled{opacity:.45; box-shadow:none; cursor:not-allowed}
+
+  .prod:focus-visible,.btn:focus-visible{
+    outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:2px}
+</style>
+{% endblock %}
+
+{% block content %}
+    <section class="screen" aria-label="売上入力">
+      <p class="eyebrow">売上入力</p>
+      <div class="prodgrid" id="prodgrid">
+        {% for product in products %}
+          {% if product.is_stock_managed and product.remaining_stock == 0 %}
+            <button class="prod{% if products|length == 1 %} wide{% endif %}" type="button" disabled
+                    aria-label="{{ product.name }} は売切">
+              <span class="pn">{{ product.name }}</span>
+              <span class="pp">¥{{ product.price }} <span class="soldout-tag">売切</span></span>
+            </button>
+          {% else %}
+            <button class="prod{% if products|length == 1 %} wide{% endif %}" type="button"
+                    data-count="0"
+                    data-id="{{ product.id }}"
+                    data-price="{{ product.price }}"
+                    data-name="{{ product.name }}"
+                    aria-label="{{ product.name }} ¥{{ product.price }} を会計に追加">
+              <span class="badge">0</span>
+              <span class="pn">{{ product.name }}</span>
+              <span class="pp">¥{{ product.price }}</span>
+              {% if product.is_stock_managed %}
+                <span class="stk{% if product.is_low_stock %} low{% endif %}">残 {{ product.remaining_stock }}</span>
+              {% endif %}
+            </button>
+          {% endif %}
+        {% empty %}
+          <p style="grid-column:1/-1;color:var(--ink-faint);text-align:center;padding:24px 0">
+            この屋台には登録された商品がありません。
+          </p>
+        {% endfor %}
+      </div>
+    </section>
+{% endblock %}
+
+{% block after_screens %}
+  <div class="tray">
+    <div class="tray-inner">
+      <div class="tray-list" id="trayList">
+        <div class="tray-empty">商品をタップして会計に追加</div>
+      </div>
+      <div class="tray-sum">
+        <span class="lbl" id="trayCount">0点</span>
+        <span class="tot"><small>¥</small><span id="trayTotal">0</span></span>
+      </div>
+      <form id="saleForm" method="post" action="{% url 'core:sale_input' access_token=stall.access_token %}">
+        {% csrf_token %}
+        <input type="hidden" name="items" id="itemsField">
+        <div class="tray-btns">
+          <button class="btn ghost" id="clearBtn" type="button" aria-label="全て取り消し">取消</button>
+          <button class="btn rec" id="recBtn" type="submit" disabled>記録する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var yen = function(n){ return n.toLocaleString("ja-JP"); };
+
+  // cart: id -> {price:int, name:str, qty:int}
+  var cart = {};
+
+  function qtyOf(id){ return cart[id] ? cart[id].qty : 0; }
+
+  function syncBadges(){
+    Array.prototype.forEach.call(document.querySelectorAll(".prod[data-id]"), function(btn){
+      var id = btn.dataset.id;
+      var q = qtyOf(id);
+      btn.dataset.count = q;
+      var b = btn.querySelector(".badge");
+      if(b) b.textContent = q;
+    });
+  }
+
+  function renderCart(){
+    var list = $("trayList"), total = 0, count = 0;
+    var ids = Object.keys(cart);
+    if(ids.length === 0){
+      list.innerHTML = '<div class="tray-empty">商品をタップして会計に追加</div>';
+    } else {
+      list.innerHTML = "";
+      ids.forEach(function(id){
+        var it = cart[id], sub = it.price * it.qty;
+        total += sub; count += it.qty;
+        var row = document.createElement("div");
+        row.className = "tline";
+        var l = document.createElement("span"); l.className = "l";
+        var q = document.createElement("span"); q.className = "qty"; q.textContent = it.qty + "×";
+        var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = it.name;
+        l.appendChild(q); l.appendChild(nm);
+        var r = document.createElement("span"); r.className = "l";
+        var amt = document.createElement("span"); amt.className = "amt"; amt.textContent = "¥" + yen(sub);
+        var x = document.createElement("button"); x.className = "x"; x.type = "button";
+        x.setAttribute("aria-label", it.name + "を削除"); x.textContent = "✕";
+        x.addEventListener("click", function(){ delete cart[id]; refresh(); });
+        r.appendChild(amt); r.appendChild(x);
+        row.appendChild(l); row.appendChild(r);
+        list.appendChild(row);
+      });
+    }
+    $("trayTotal").textContent = yen(total);
+    $("trayCount").textContent = count + "点";
+    $("recBtn").disabled = count === 0;
+  }
+
+  function refresh(){ syncBadges(); renderCart(); }
+
+  // 商品タップで追加
+  Array.prototype.forEach.call(document.querySelectorAll(".prod[data-id]"), function(btn){
+    btn.addEventListener("click", function(){
+      var id = btn.dataset.id;
+      if(!cart[id]){
+        cart[id] = { price: parseInt(btn.dataset.price, 10), name: btn.dataset.name, qty: 0 };
+      }
+      cart[id].qty++;
+      refresh();
+    });
+  });
+
+  // 取消
+  $("clearBtn").addEventListener("click", function(){
+    if(Object.keys(cart).length === 0) return;
+    cart = {}; refresh();
+  });
+
+  // 記録（POST送信直前に items をJSON化）
+  $("saleForm").addEventListener("submit", function(e){
+    var items = Object.keys(cart).map(function(id){
+      return { id: parseInt(id, 10), qty: cart[id].qty };
+    });
+    if(items.length === 0){ e.preventDefault(); return; }
+    $("itemsField").value = JSON.stringify(items);
+    $("recBtn").disabled = true; // 二重送信防止
+  });
+
+  refresh();
+})();
+</script>
+{% endblock %}
