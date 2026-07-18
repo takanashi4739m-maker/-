@@ -37,8 +37,8 @@
 
 `render.yaml` により、以下が自動で行われる。
 
-- Build: `pip install -r requirements.txt; python manage.py collectstatic --noinput`
-- Pre-Deploy: `python manage.py migrate`（初期データ 0002/0004 もここで投入）
+- Build: `pip install -r requirements.txt; python manage.py collectstatic --noinput; python manage.py migrate`
+  （無料プランは preDeployCommand 非対応のため、migrate はビルド時に実行。初期データ 0002/0004 もここで投入）
 - Start: `gunicorn config.wsgi:application`
 
 ## 3. 環境変数を設定

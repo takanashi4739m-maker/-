@@ -12,10 +12,10 @@ services:
     name: festival-yatai
     runtime: python
     plan: free
-    # ビルド: 依存インストール + 静的ファイル収集（WhiteNoise 配信用）。
-    buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput"
-    # デプロイ直前に migrate を実行（初期データ 0002/0004 もここで投入される）。
-    preDeployCommand: "python manage.py migrate"
+    # ビルド: 依存インストール + 静的ファイル収集（WhiteNoise 配信用）+ migrate。
+    # 無料プランは preDeployCommand 非対応のため、migrate はビルド時に実行する
+    # （Render はビルド中も DATABASE_URL 等の環境変数を参照できる。初期データ 0002/0004 もここで投入）。
+    buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput; python manage.py migrate"
     # 本番起動は gunicorn（WSGI）。
     startCommand: "gunicorn config.wsgi:application"
     envVars:
