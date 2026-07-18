@@ -69,6 +69,23 @@ ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 # 本番の Origin を明示的に信頼する（例: https://<app>.onrender.com）。
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 
+# Render は本番のホスト名を RENDER_EXTERNAL_HOSTNAME 環境変数に自動注入する。
+# 手動設定（DJANGO_ALLOWED_HOSTS 等）に頼らず、これを許可ホスト/信頼Originへ自動反映する。
+_render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if _render_host:
+    if _render_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_render_host)
+    _render_origin = f"https://{_render_host}"
+    if _render_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_render_origin)
+
+# 本番では onrender.com のサブドメインを広く許可する（設定漏れの保険）。
+if not DEBUG:
+    if ".onrender.com" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(".onrender.com")
+    if "https://*.onrender.com" not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append("https://*.onrender.com")
+
 
 # Application definition
 
