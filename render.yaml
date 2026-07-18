@@ -15,7 +15,9 @@ services:
     # ビルド: 依存インストール + 静的ファイル収集（WhiteNoise 配信用）+ migrate。
     # 無料プランは preDeployCommand 非対応のため、migrate はビルド時に実行する
     # （Render はビルド中も DATABASE_URL 等の環境変数を参照できる。初期データ 0002/0004 もここで投入）。
-    buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput; python manage.py migrate"
+    # 末尾の show_urls で、本番の各屋台/ダッシュボードのアクセスURLをビルドログに出力する
+    # （無料プランは Shell 非対応のため、ログでURLを確認できるようにする）。
+    buildCommand: "pip install -r requirements.txt; python manage.py collectstatic --noinput; python manage.py migrate; python manage.py show_urls"
     # 本番起動は gunicorn（WSGI）。
     startCommand: "gunicorn config.wsgi:application"
     envVars:
