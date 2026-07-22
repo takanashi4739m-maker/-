@@ -176,6 +176,27 @@ def _handle_stock_post(request, stall, access_token):
             return redirect("core:stock_manage", access_token=access_token)
         messages.success(request, f"{product.name} を {amount} に修正しました")
 
+    elif action == "set_initial":
+        # 開始個数の設定は在庫管理対象かつ売上ゼロの商品のみ許可する。
+        # UI で入力を無効化していても、サーバ側で必ず弾く（改ざん対策）。
+        if not product.is_stock_managed:
+            messages.error(request, "この商品は在庫管理の対象外です。")
+            return redirect("core:stock_manage", access_token=access_token)
+        if product.sold_quantity > 0:
+            messages.error(
+                request,
+                f"{product.name} は売上があるため開始個数を変更できません。",
+            )
+            return redirect("core:stock_manage", access_token=access_token)
+        if amount < 0:
+            messages.error(request, "開始個数は0以上で入力してください。")
+            return redirect("core:stock_manage", access_token=access_token)
+        product.initial_stock = amount
+        product.save(update_fields=["initial_stock"])
+        messages.success(
+            request, f"{product.name} の開始個数を {amount} に設定しました"
+        )
+
     else:
         messages.error(request, "操作の指定が不正です。")
 

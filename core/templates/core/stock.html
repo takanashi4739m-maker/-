@@ -43,6 +43,10 @@
   .unmanaged .um-tag{font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:6px; background:var(--well); color:var(--ink-faint)}
   .num-in:focus,.stepper button:focus-visible,.act:focus-visible{
     outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:2px}
+  .sc-sep{border:0; border-top:1px dashed var(--line); margin:11px 0 2px}
+  .lbl.wide{flex:0 0 auto}
+  .set-lock{font-size:11.5px; font-weight:700; color:var(--ink-faint); line-height:1.4; flex:1}
+  .set-lock b{color:var(--ink-soft); font-variant-numeric:tabular-nums}
 </style>
 {% endblock %}
 
@@ -60,6 +64,28 @@
             </span>
             <span class="sc-now">現在<b>{{ r }}</b></span>
           </div>
+
+          {# 開始個数: 当日の初期在庫を確定。売上ゼロの商品のみ設定可 #}
+          {% if p.sold_quantity == 0 %}
+            <form method="post" action="{% url 'core:stock_manage' access_token=stall.access_token %}">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="set_initial">
+              <input type="hidden" name="product_id" value="{{ p.id }}">
+              <div class="sc-row">
+                <span class="lbl">開始</span>
+                <input class="num-in" type="number" name="value" min="0" step="1"
+                       value="{{ p.initial_stock|default:0 }}" inputmode="numeric"
+                       aria-label="{{ p.name }} の開始個数">
+                <button type="submit" class="act">開始個数を設定</button>
+              </div>
+            </form>
+          {% else %}
+            <div class="sc-row">
+              <span class="lbl wide">開始</span>
+              <span class="set-lock">売上があるため開始個数は変更できません（開始 <b>{{ p.initial_stock|default:0 }}</b>）</span>
+            </div>
+          {% endif %}
+          <hr class="sc-sep">
 
           {# 補充（+）: ステッパーで補充数を決めて記録 #}
           <form method="post" action="{% url 'core:stock_manage' access_token=stall.access_token %}" class="restock-form">
