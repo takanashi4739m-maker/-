@@ -12,14 +12,18 @@ from decimal import Decimal
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db.models import Count, Sum
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .models import Event, Expense, Sale, Stall
+from .models import Event, Expense, Sale, Stall, StockAdjustment
 from .services import (
     record_expense,
     record_sale,
     record_stock_adjustment,
+    void_expense,
+    void_sale,
+    void_stock_adjustment,
 )
 
 
@@ -208,6 +212,61 @@ def _safe_int(raw):
         return int(raw)
     except (TypeError, ValueError):
         return -1
+
+
+# ===== 履歴・取消 =====
+
+def history(request, access_token):
+    """直近の記録一覧（売上・経費・在庫調整）から選んで取消する画面。"""
+    stall = _get_stall(access_token)
+    if request.method == "POST":
+        return _handle_history_post(request, stall, access_token)
+
+    # 直近N件（各20件）を新しい順に。3種類をまとめて時系列表示するため
+    # それぞれにkindタグを付けて結合し、created_atで降順ソートする。
+    sales = [{"kind": "sale", "obj": s, "created_at": s.created_at} for s in
+             stall.sales.order_by("-created_at")[:20]]
+    expenses = [{"kind": "expense", "obj": e, "created_at": e.created_at} for e in
+                stall.expenses.order_by("-created_at")[:20]]
+    adjustments = [{"kind": "stock", "obj": a, "created_at": a.created_at} for a in
+                   StockAdjustment.objects.filter(product__stall=stall).select_related("product").order_by("-created_at")[:20]]
+    entries = sorted(sales + expenses + adjustments, key=lambda e: e["created_at"], reverse=True)[:30]
+
+    context = {"stall": stall, "entries": entries, "active_tab": "history"}
+    return render(request, "core/history.html", context)
+
+
+def _handle_history_post(request, stall, access_token):
+    kind = request.POST.get("kind", "")
+    obj_id = _safe_int(request.POST.get("id", ""))
+
+    if kind == "sale":
+        sale = get_object_or_404(stall.sales, pk=obj_id)
+        label = f"¥{sale.total:,.0f} の売上"
+        void_sale(sale)
+    elif kind == "expense":
+        expense = get_object_or_404(stall.expenses, pk=obj_id)
+        label = f"¥{expense.amount:,.0f} の経費"
+        void_expense(expense)
+    elif kind == "stock":
+        adjustment = get_object_or_404(
+            StockAdjustment.objects.filter(product__stall=stall), pk=obj_id
+        )
+        label = f"{adjustment.product.name} の在庫調整"
+        void_stock_adjustment(adjustment)
+    else:
+        messages.error(request, "操作の指定が不正です。")
+        return redirect("core:history", access_token=access_token)
+
+    messages.success(request, f"{label}を取り消しました")
+    return redirect("core:history", access_token=access_token)
+
+
+# ===== ヘルスチェック（監視サービス用・トークン不要） =====
+
+def healthz(request):
+    """スリープ対策の軽量ヘルスチェック。認証不要・DBアクセスなし。"""
+    return HttpResponse("ok")
 
 
 # ===== ダッシュボード（イベント全体） =====

@@ -194,3 +194,23 @@ def record_stock_adjustment(product, delta, kind, note="") -> StockAdjustment:
         kind=kind,
         note=note,
     )
+
+
+@transaction.atomic
+def void_sale(sale: Sale) -> None:
+    """売上を取り消す。紐づくCashEntryも削除し、現金残高のズレを防ぐ。"""
+    CashEntry.objects.filter(sale=sale).delete()
+    sale.delete()  # SaleItem は CASCADE で自動削除 → 在庫は自動で戻る
+
+
+@transaction.atomic
+def void_expense(expense: Expense) -> None:
+    """経費を取り消す。紐づくCashEntry（現金払いの場合のみ存在）も削除する。"""
+    CashEntry.objects.filter(expense=expense).delete()
+    expense.delete()
+
+
+@transaction.atomic
+def void_stock_adjustment(adjustment: StockAdjustment) -> None:
+    """在庫調整（補充・棚卸）を取り消す。"""
+    adjustment.delete()

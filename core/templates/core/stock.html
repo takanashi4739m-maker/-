@@ -22,14 +22,14 @@
   .sc-row{display:flex; align-items:center; gap:10px; margin-top:9px}
   .sc-row .lbl{flex:0 0 42px; font-size:11.5px; font-weight:800; color:var(--ink-soft)}
   .stepper{display:flex; align-items:center; border:1.5px solid var(--line); border-radius:12px; overflow:hidden; flex:0 0 auto}
-  .stepper button{appearance:none; cursor:pointer; width:38px; height:40px; border:0; background:var(--surface); color:var(--ink); font-size:22px; font-weight:700; line-height:1}
+  .stepper button{appearance:none; cursor:pointer; width:var(--tap-min); height:var(--tap-min); border:0; background:var(--surface); color:var(--ink); font-size:22px; font-weight:700; line-height:1}
   .stepper button:active{background:var(--well)}
   .stepper .sv{width:44px; text-align:center; font-size:17px; font-weight:900; font-variant-numeric:tabular-nums}
-  .num-in{width:64px; height:40px; text-align:center; font-family:inherit; font-size:16px; font-weight:800;
+  .num-in{width:64px; height:var(--tap-min); text-align:center; font-family:inherit; font-size:16px; font-weight:800;
     border:1.5px solid var(--line); border-radius:12px; background:var(--surface); color:var(--ink);
     font-variant-numeric:tabular-nums}
   .act{appearance:none; cursor:pointer; font-family:inherit; font-weight:800; font-size:13px; padding:11px 14px;
-    border-radius:12px; border:1.5px solid var(--line); background:var(--surface); color:var(--ink); flex:1}
+    min-height:var(--tap-min); border-radius:12px; border:1.5px solid var(--line); background:var(--surface); color:var(--ink); flex:1}
   .act:active{transform:scale(.97)}
   .act.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
   .act.indigo{background:var(--indigo); color:var(--indigo-ink); border-color:var(--indigo)}

@@ -40,6 +40,9 @@ from .services import (
     record_expense,
     record_sale,
     record_stock_adjustment,
+    void_expense,
+    void_sale,
+    void_stock_adjustment,
 )
 
 # ビュー描画テスト用: マニフェストを要求しない通常の静的ストレージへ差し替える。
@@ -425,6 +428,98 @@ class RecordStockAdjustmentServiceTest(BaseFixtureMixin, TestCase):
             record_stock_adjustment(self.drink, 5, kind="bogus")
 
 
+class VoidSaleServiceTest(BaseFixtureMixin, TestCase):
+    """売上の取消: CashEntryが残らないこと・在庫が戻ることを確認。"""
+
+    def setUp(self):
+        self.make_fixtures()
+
+    def test_void_sale_removes_cash_entry_and_restores_stock(self):
+        sale = record_sale(self.stall, [{"id": self.drink.id, "qty": 5}])
+        self.drink.refresh_from_db()
+        self.assertEqual(self.drink.sold_quantity, 5)
+        self.assertEqual(self.drink.remaining_stock, 95)
+        self.assertTrue(CashEntry.objects.filter(sale=sale).exists())
+        self.stall.refresh_from_db()
+        self.assertEqual(self.stall.cash_balance, Decimal("10000") + Decimal("2000"))
+
+        void_sale(sale)
+
+        self.assertFalse(Sale.objects.filter(pk=sale.pk).exists())
+        self.assertFalse(SaleItem.objects.filter(sale_id=sale.pk).exists())
+        self.assertFalse(CashEntry.objects.filter(sale_id=sale.pk).exists())
+        self.drink.refresh_from_db()
+        self.assertEqual(self.drink.sold_quantity, 0)
+        self.assertEqual(self.drink.remaining_stock, 100)  # 在庫が戻る
+        self.stall.refresh_from_db()
+        self.assertEqual(self.stall.cash_balance, Decimal("10000"))  # 現金残高も戻る
+
+
+class VoidExpenseServiceTest(BaseFixtureMixin, TestCase):
+    """経費の取消: 現金払い/非現金払いそれぞれでCashEntryの有無を確認。"""
+
+    def setUp(self):
+        self.make_fixtures()
+
+    def test_void_expense_cash_removes_cash_entry(self):
+        expense = record_expense(
+            self.stall, "1500", Expense.Category.PURCHASE, paid_in_cash=True
+        )
+        self.assertTrue(CashEntry.objects.filter(expense=expense).exists())
+        self.stall.refresh_from_db()
+        self.assertEqual(self.stall.cash_balance, Decimal("8500"))
+
+        void_expense(expense)
+
+        self.assertFalse(Expense.objects.filter(pk=expense.pk).exists())
+        self.assertFalse(CashEntry.objects.filter(expense_id=expense.pk).exists())
+        self.stall.refresh_from_db()
+        self.assertEqual(self.stall.cash_balance, Decimal("10000"))  # 現金残高が戻る
+
+    def test_void_expense_non_cash_has_no_cash_entry_to_remove(self):
+        expense = record_expense(
+            self.stall, "2000", Expense.Category.SUPPLY, paid_in_cash=False
+        )
+        self.assertFalse(CashEntry.objects.filter(expense=expense).exists())
+
+        void_expense(expense)
+
+        self.assertFalse(Expense.objects.filter(pk=expense.pk).exists())
+        self.assertFalse(CashEntry.objects.filter(expense_id=expense.pk).exists())
+        self.stall.refresh_from_db()
+        self.assertEqual(self.stall.cash_balance, Decimal("10000"))  # 元々不変
+
+
+class VoidStockAdjustmentServiceTest(BaseFixtureMixin, TestCase):
+    """在庫調整の取消: remaining_stockが戻ることを確認。"""
+
+    def setUp(self):
+        self.make_fixtures()
+
+    def test_void_restock_restores_remaining_stock(self):
+        adj = record_stock_adjustment(self.drink, 30, kind="restock")
+        self.drink.refresh_from_db()
+        self.assertEqual(self.drink.remaining_stock, 130)
+
+        void_stock_adjustment(adj)
+
+        self.assertFalse(StockAdjustment.objects.filter(pk=adj.pk).exists())
+        self.drink.refresh_from_db()
+        self.assertEqual(self.drink.remaining_stock, 100)  # 元に戻る
+
+    def test_void_stocktake_restores_remaining_stock(self):
+        record_sale(self.stall, [{"id": self.drink.id, "qty": 10}])  # 残90
+        self.drink.refresh_from_db()
+        adj = record_stock_adjustment(self.drink, -20, kind="stocktake")  # 残70
+        self.drink.refresh_from_db()
+        self.assertEqual(self.drink.remaining_stock, 70)
+
+        void_stock_adjustment(adj)
+
+        self.drink.refresh_from_db()
+        self.assertEqual(self.drink.remaining_stock, 90)  # 棚卸取消前に戻る
+
+
 # ============================================================
 # 3. ビュー・アクセス制御
 # ============================================================
@@ -436,13 +531,13 @@ class AccessControlTest(BaseFixtureMixin, TestCase):
         self.client = Client()
 
     def test_valid_token_get_200(self):
-        for name in ("sale_input", "expense_input", "stock_manage"):
+        for name in ("sale_input", "expense_input", "stock_manage", "history"):
             url = reverse(f"core:{name}", args=[self.stall.access_token])
             resp = self.client.get(url)
             self.assertEqual(resp.status_code, 200, name)
 
     def test_invalid_token_404(self):
-        for name in ("sale_input", "expense_input", "stock_manage"):
+        for name in ("sale_input", "expense_input", "stock_manage", "history"):
             url = reverse(f"core:{name}", args=["invalid-token-xxx"])
             resp = self.client.get(url)
             self.assertEqual(resp.status_code, 404, name)
@@ -452,6 +547,11 @@ class AccessControlTest(BaseFixtureMixin, TestCase):
         self.assertEqual(self.client.get(ok).status_code, 200)
         ng = reverse("core:dashboard", args=["nope"])
         self.assertEqual(self.client.get(ng).status_code, 404)
+
+    def test_healthz_no_token_required(self):
+        # 監視サービス用のヘルスチェック。トークン不要で200を返す。
+        resp = self.client.get(reverse("core:healthz"))
+        self.assertEqual(resp.status_code, 200)
 
 
 @override_settings(STORAGES=TEST_STORAGES)
@@ -591,6 +691,81 @@ class StockViewTest(BaseFixtureMixin, TestCase):
         )
         # 他屋台の商品IDは stall.products から取得できず 404
         self.assertEqual(resp.status_code, 404)
+
+
+@override_settings(STORAGES=TEST_STORAGES)
+class HistoryViewTest(BaseFixtureMixin, TestCase):
+    """履歴一覧・取消のアクセス制御とPRGを確認。"""
+
+    def setUp(self):
+        self.make_fixtures()
+        self.client = Client()
+        self.url = reverse("core:history", args=[self.stall.access_token])
+
+    def _messages(self, response):
+        return [m.message for m in get_messages(response.wsgi_request)]
+
+    def test_history_get_lists_entries(self):
+        sale = record_sale(self.stall, [{"id": self.drink.id, "qty": 2}])
+        expense = record_expense(
+            self.stall, "1000", Expense.Category.PURCHASE, paid_in_cash=True
+        )
+        adj = record_stock_adjustment(self.drink, 10, kind="restock")
+
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        kinds = {(e["kind"], e["obj"].pk) for e in resp.context["entries"]}
+        self.assertIn(("sale", sale.pk), kinds)
+        self.assertIn(("expense", expense.pk), kinds)
+        self.assertIn(("stock", adj.pk), kinds)
+
+    def test_void_sale_post_redirects_and_removes_records(self):
+        sale = record_sale(self.stall, [{"id": self.drink.id, "qty": 2}])
+        resp = self.client.post(self.url, {"kind": "sale", "id": sale.pk})
+        self.assertEqual(resp.status_code, 302)  # PRG
+        self.assertFalse(Sale.objects.filter(pk=sale.pk).exists())
+        self.assertTrue(any("取り消しました" in m for m in self._messages(resp)))
+
+    def test_void_expense_post_redirects_and_removes_records(self):
+        expense = record_expense(
+            self.stall, "500", Expense.Category.PURCHASE, paid_in_cash=True
+        )
+        resp = self.client.post(self.url, {"kind": "expense", "id": expense.pk})
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Expense.objects.filter(pk=expense.pk).exists())
+        self.assertTrue(any("取り消しました" in m for m in self._messages(resp)))
+
+    def test_void_stock_post_redirects_and_removes_records(self):
+        adj = record_stock_adjustment(self.drink, 10, kind="restock")
+        resp = self.client.post(self.url, {"kind": "stock", "id": adj.pk})
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(StockAdjustment.objects.filter(pk=adj.pk).exists())
+        self.assertTrue(any("取り消しました" in m for m in self._messages(resp)))
+
+    def test_void_other_stall_sale_404(self):
+        other_sale = record_sale(self.other_stall, [{"id": self.other_product.id, "qty": 1}])
+        resp = self.client.post(self.url, {"kind": "sale", "id": other_sale.pk})
+        self.assertEqual(resp.status_code, 404)
+        self.assertTrue(Sale.objects.filter(pk=other_sale.pk).exists())  # 削除されない
+
+    def test_void_other_stall_expense_404(self):
+        other_expense = record_expense(
+            self.other_stall, "300", Expense.Category.PURCHASE, paid_in_cash=True
+        )
+        resp = self.client.post(self.url, {"kind": "expense", "id": other_expense.pk})
+        self.assertEqual(resp.status_code, 404)
+        self.assertTrue(Expense.objects.filter(pk=other_expense.pk).exists())
+
+    def test_void_other_stall_stock_adjustment_404(self):
+        other_adj = record_stock_adjustment(self.other_product, 5, kind="restock")
+        resp = self.client.post(self.url, {"kind": "stock", "id": other_adj.pk})
+        self.assertEqual(resp.status_code, 404)
+        self.assertTrue(StockAdjustment.objects.filter(pk=other_adj.pk).exists())
+
+    def test_void_invalid_kind_shows_error(self):
+        resp = self.client.post(self.url, {"kind": "bogus", "id": "1"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(any("不正です" in m for m in self._messages(resp)))
 
 
 @override_settings(STORAGES=TEST_STORAGES)

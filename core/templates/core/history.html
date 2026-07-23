@@ -1,0 +1,67 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}{{ stall.emoji }}{{ stall.name }} ｜ 履歴・取消{% endblock %}
+
+{% block head_extra %}
+<style>
+  .hist-card{background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:12px 14px; margin-bottom:10px; display:flex; align-items:center; gap:11px}
+  .hist-icon{flex:0 0 auto; width:38px; height:38px; border-radius:11px; display:grid; place-items:center;
+    font-size:18px; background:var(--well)}
+  .hist-icon.sale{background:var(--good-bg)}
+  .hist-icon.expense{background:var(--warn-bg)}
+  .hist-icon.stock{background:var(--surface-2); border:1px dashed var(--line)}
+  .hist-body{flex:1; min-width:0}
+  .hist-title{font-size:13.5px; font-weight:800; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .hist-sub{font-size:11.5px; color:var(--ink-faint); font-weight:700; margin-top:2px; font-variant-numeric:tabular-nums}
+  .hist-void{flex:0 0 auto}
+  .void-btn{appearance:none; cursor:pointer; font-family:inherit; font-weight:800; font-size:12.5px;
+    padding:9px 13px; min-height:var(--tap-min); border-radius:11px; border:1.5px solid var(--crit); background:var(--crit-bg);
+    color:var(--crit); white-space:nowrap}
+  .void-btn:active{transform:scale(.96)}
+  .void-btn:disabled{opacity:.5; cursor:not-allowed}
+  .void-btn:focus-visible{outline:3px solid color-mix(in srgb,var(--crit) 55%,transparent); outline-offset:2px}
+  .hist-empty{color:var(--ink-faint); text-align:center; padding:24px 0; font-size:13px}
+</style>
+{% endblock %}
+
+{% block content %}
+    <section class="screen" aria-label="履歴・取消">
+      <p class="eyebrow">履歴・取消 ・ {{ stall.name }}</p>
+
+      {% for entry in entries %}
+        {% with obj=entry.obj %}
+        <div class="hist-card">
+          {% if entry.kind == "sale" %}
+            <span class="hist-icon sale" aria-hidden="true">🛒</span>
+            <div class="hist-body">
+              <div class="hist-title">¥{{ obj.total|floatformat:0 }} の売上（{{ obj.items.count }}点）</div>
+              <div class="hist-sub">{{ entry.created_at|date:"m/d H:i" }}</div>
+            </div>
+          {% elif entry.kind == "expense" %}
+            <span class="hist-icon expense" aria-hidden="true">💸</span>
+            <div class="hist-body">
+              <div class="hist-title">{{ obj.get_category_display }} ¥{{ obj.amount|floatformat:0 }}{% if obj.memo %}（{{ obj.memo }}）{% endif %}</div>
+              <div class="hist-sub">{{ entry.created_at|date:"m/d H:i" }}{% if not obj.paid_in_cash %} ・ 現金以外{% endif %}</div>
+            </div>
+          {% else %}
+            <span class="hist-icon stock" aria-hidden="true">📦</span>
+            <div class="hist-body">
+              <div class="hist-title">{{ obj.product.name }} の在庫調整（{{ obj.delta|stringformat:"+d" }}・{{ obj.get_kind_display }}）</div>
+              <div class="hist-sub">{{ entry.created_at|date:"m/d H:i" }}</div>
+            </div>
+          {% endif %}
+          <form method="post" action="{% url 'core:history' access_token=stall.access_token %}" class="hist-void">
+            {% csrf_token %}
+            <input type="hidden" name="kind" value="{{ entry.kind }}">
+            <input type="hidden" name="id" value="{{ obj.id }}">
+            <button type="submit" class="void-btn">取消</button>
+          </form>
+        </div>
+        {% endwith %}
+      {% empty %}
+        <p class="hist-empty">まだ記録がありません。</p>
+      {% endfor %}
+    </section>
+{% endblock %}

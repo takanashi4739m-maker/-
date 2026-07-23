@@ -17,6 +17,7 @@
     --backdrop-a:#1b2244; --backdrop-b:#2c3566; --wave:rgba(255,255,255,.05);
     --shadow:0 18px 50px -18px rgba(20,24,45,.55);
     --font:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic UI","Yu Gothic",Meiryo,system-ui,sans-serif;
+    --tap-min:44px;
   }
   @media (prefers-color-scheme:dark){
     :root{
@@ -116,7 +117,7 @@
 
   /* 屋台内セグメントタブ（売上/経費/在庫） */
   .segtabs{max-width:520px; margin:6px auto 0; padding:0 16px;
-    display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+    display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
   .segtab{appearance:none; text-decoration:none; text-align:center; cursor:pointer;
     font-family:inherit; font-size:13px; font-weight:800; padding:10px 4px; border-radius:12px;
     border:1.5px solid var(--line); background:var(--surface); color:var(--ink-soft);
@@ -136,6 +137,18 @@
   .toast .tk{width:22px; height:22px; border-radius:50%; background:var(--good); display:grid; place-items:center; color:#fff; flex:0 0 auto}
   .toast.err .tk{background:rgba(255,255,255,.25)}
   @media (prefers-reduced-motion:reduce){.toast{transition:none}}
+
+  /* 主要ボタン（売上・経費の記録ボタン等、画面横断の共通定義） */
+  .btn{appearance:none; cursor:pointer; font-family:inherit; font-weight:800; border-radius:14px; border:1.5px solid var(--line);
+    background:var(--surface); color:var(--ink); font-size:14px; padding:14px; min-height:var(--tap-min);
+    transition:transform .08s,filter .12s}
+  .btn:active{transform:scale(.97)}
+  .btn.ghost{flex:0 0 auto; width:56px; color:var(--ink-soft)}
+  .btn.rec{flex:1; background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-size:16px;
+    box-shadow:0 8px 18px -8px var(--accent)}
+  .btn.rec:active{background:var(--accent-press)}
+  .btn.rec:disabled{opacity:.45; box-shadow:none; cursor:not-allowed}
+  .btn:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:2px}
 </style>
 {% block head_extra %}{% endblock %}
 </head>
@@ -183,6 +196,9 @@
         <a class="segtab{% if active_tab == 'stock' %} on{% endif %}"
            href="{% url 'core:stock_manage' access_token=stall.access_token %}"
            {% if active_tab == 'stock' %}aria-current="page"{% endif %}>在庫</a>
+        <a class="segtab{% if active_tab == 'history' %} on{% endif %}"
+           href="{% url 'core:history' access_token=stall.access_token %}"
+           {% if active_tab == 'history' %}aria-current="page"{% endif %}>履歴</a>
       </nav>
       {% endif %}
     {% endblock %}
@@ -239,6 +255,27 @@
     var cur = root.getAttribute("data-theme");
     if(!cur){ cur = window.matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light"; }
     root.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  });
+
+  // 二重送信防止 + 通信失敗時の再送導線（共通）
+  // 個別画面のJSがバリデーションで preventDefault した場合は何もしない。
+  // submit イベントは対象フォーム→document へバブリングするため、個別画面の
+  // submit リスナー（preventDefault の判定含む）は必ずこのリスナーより先に走る。
+  document.addEventListener("submit", function(e){
+    var form = e.target;
+    if(form.tagName !== "FORM" || form.dataset.submitting === "1") return;
+    setTimeout(function(){
+      if(e.defaultPrevented) return;
+      form.dataset.submitting = "1";
+      var btns = form.querySelectorAll('[type="submit"]');
+      btns.forEach(function(b){ b.disabled = true; });
+      setTimeout(function(){
+        // 8秒経っても遷移していない＝通信失敗とみなし、再送できるようにする
+        form.dataset.submitting = "0";
+        btns.forEach(function(b){ b.disabled = false; });
+        if(window.showToast) showToast("通信が不安定です。もう一度お試しください", "error");
+      }, 8000);
+    }, 0);
   });
 })();
 </script>

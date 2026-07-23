@@ -43,16 +43,9 @@
   .tray-sum .tot{font-size:30px; font-weight:900; letter-spacing:-.01em; font-variant-numeric:tabular-nums}
   .tray-sum .tot small{font-size:15px; font-weight:800; margin-right:2px}
   .tray-btns{display:flex; gap:9px}
-  .btn{appearance:none; cursor:pointer; font-family:inherit; font-weight:800; border-radius:14px; border:1.5px solid var(--line);
-    background:var(--surface); color:var(--ink); font-size:14px; padding:14px; transition:transform .08s,filter .12s}
-  .btn:active{transform:scale(.97)}
-  .btn.ghost{flex:0 0 auto; width:56px; color:var(--ink-soft)}
-  .btn.rec{flex:1; background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-size:16px;
-    box-shadow:0 8px 18px -8px var(--accent)}
-  .btn.rec:active{background:var(--accent-press)}
-  .btn.rec:disabled{opacity:.45; box-shadow:none; cursor:not-allowed}
+  /* .btn（記録ボタン等）は base.html の共通定義を使用 */
 
-  .prod:focus-visible,.btn:focus-visible{
+  .prod:focus-visible{
     outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:2px}
 </style>
 {% endblock %}
@@ -194,7 +187,7 @@
     });
     if(items.length === 0){ e.preventDefault(); return; }
     $("itemsField").value = JSON.stringify(items);
-    $("recBtn").disabled = true; // 二重送信防止
+    // 二重送信防止はbase.htmlの共通処理が担う
   });
 
   refresh();
