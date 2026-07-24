@@ -269,6 +269,15 @@ def healthz(request):
     return HttpResponse("ok")
 
 
+def practice(request):
+    """操作練習用のデモページ（認証不要・DBアクセスなし）。
+
+    メンバーがスマホで操作に慣れられるよう、本番と同じ画面構成のデモを提供する。
+    入力はすべてブラウザ内だけで完結し、DB には一切保存しない（再読み込みで消える）。
+    """
+    return render(request, "core/practice.html")
+
+
 # ===== ダッシュボード（イベント全体） =====
 
 def dashboard(request, dashboard_token):

@@ -21,4 +21,5 @@ urlpatterns = [
     path("s/<str:access_token>/history/", views.history, name="history"),
     path("dashboard/<str:dashboard_token>/", views.dashboard, name="dashboard"),
     path("healthz/", views.healthz, name="healthz"),
+    path("practice/", views.practice, name="practice"),
 ]
