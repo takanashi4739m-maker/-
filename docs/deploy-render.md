@@ -51,13 +51,19 @@
 | `DJANGO_DEBUG` | `False` | 本番は必ず False |
 | `DJANGO_ALLOWED_HOSTS` | （ホスト名を自動注入） | 独自ドメインは追記 |
 | `DATABASE_URL` | （DBから自動リンク） | PostgreSQL 接続文字列 |
-| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://festival-yatai.onrender.com` | ★手入力。実ホスト名に合わせる |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | （通常は空でよい） | 任意。下記のとおり自動許可されるため手入力は不要 |
 | `BASE_URL` | `https://festival-yatai.onrender.com` | ★手入力（任意）。show_urls のフルURL表示用 |
 | `PYTHON_VERSION` | `3.12.10` | |
 
-> デプロイ後に確定する実ホスト名（`https://<サービス名>.onrender.com`）を
-> `DJANGO_CSRF_TRUSTED_ORIGINS` と `BASE_URL` に設定し、再デプロイする。
-> これを設定しないと、トークンURLでの売上・経費・在庫の POST が CSRF で 403 になる。
+> **CSRF は自動許可される（手入力不要）。** `config/settings.py` は `DEBUG=False` のとき
+> `RENDER_EXTERNAL_HOSTNAME`（Render が自動注入する実ホスト名）を `ALLOWED_HOSTS` と
+> `CSRF_TRUSTED_ORIGINS` に自動追加し、さらに保険として `https://*.onrender.com` を
+> `CSRF_TRUSTED_ORIGINS` に加える。このため onrender.com ホストではトークンURLの
+> POST（売上・経費・在庫）が 403 にならない。`DJANGO_CSRF_TRUSTED_ORIGINS` の手入力は
+> 独自ドメインを使う場合のみ必要（例: `https://例.com`）。
+>
+> `BASE_URL` は show_urls がフルURLを表示するための任意設定。設定するなら実ホスト名
+> （`https://<サービス名>.onrender.com`）を入れて再デプロイする。
 
 ## 4. 初回 migrate（初期データ投入）
 
